@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Outpulse Flow · playground</title>
+<link rel="stylesheet" href="/web/style.css">
+</head>
+<body>
+<div id="canvas"><div id="world"><svg id="edges"></svg><div id="nodes"></div></div></div>
+
+<div id="top">
+  <div class="glass pill brand" title="Outpulse Flow">
+    <svg viewBox="0 0 24 24" fill="#15171c"><circle cx="12" cy="4" r="1.6"/><circle cx="12" cy="20" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="20" cy="12" r="1.6"/><circle cx="6.3" cy="6.3" r="1.6"/><circle cx="17.7" cy="17.7" r="1.6"/><circle cx="6.3" cy="17.7" r="1.6"/><circle cx="17.7" cy="6.3" r="1.6"/><circle cx="12" cy="12" r="2.6" fill="#2457ff"/></svg>
+  </div>
+  <div class="glass pill wfname"><small>Workflow</small><input id="wfname" value="Untitled" spellcheck="false"></div>
+  <div class="spacer"></div>
+  <div id="status" class="status">Idle</div>
+  <button class="btn dark" id="loadBtn"><span data-i="folder"></span>Load</button>
+  <button class="btn dark" id="saveBtn"><span data-i="download"></span>Save</button>
+  <button class="btn blue" id="runBtn"><span data-i="play"></span>Run</button>
+</div>
+
+<div id="rail" class="glass">
+  <button class="on" data-panel="palette" title="Nodes"><span data-i="grid"></span></button>
+  <button class="on" data-panel="bottom" title="Run log"><span data-i="chart"></span></button>
+  <button id="fitBtn" title="Fit to screen"><span data-i="fit"></span></button>
+  <button id="clearBtn" title="Clear run"><span data-i="reset"></span></button>
+</div>
+
+<div id="palette" class="glass panel">
+  <div class="search"><span data-i="search"></span><input id="q" placeholder="Quick search"></div>
+  <div id="plist"></div>
+</div>
+
+<div id="inspector" class="glass panel hidden"></div>
+
+<div id="mini" class="glass"><div class="map" id="map"></div>
+  <div class="zoom"><button id="zout">−</button><span id="zpct">100%</span><button id="zin">+</button></div></div>
+
+<div id="approval" class="glass hidden"><b>Approval needed</b><p id="apmsg"></p>
+  <div class="row2"><button class="btn sm" id="rej" style="background:#2c2f37;color:#fff">Reject</button><button class="btn sm" id="app" style="background:var(--lime);color:var(--ink)">Approve</button></div></div>
+
+<div id="bottom">
+  <div class="glass card"><h4><span class="k" data-i="chart"></span>Step duration<span class="legend"><span><i style="background:var(--blue)"></i>ok</span><span><i style="background:var(--amber)"></i>waiting</span><span><i style="background:var(--red)"></i>error</span></span></h4>
+    <div id="bars"></div><div id="bars-x"></div></div>
+  <div class="glass card"><h4><span class="k" data-i="terminal"></span>Run overview</h4><div class="tbl" id="tbl"></div></div>
+</div>
+
+<div id="loadmenu" class="glass hidden"></div>
+<div id="toast"></div>
+<script type="module" src="/web/app.js"></script>
+</body>
+</html>
