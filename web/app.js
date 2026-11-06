@@ -1,6 +1,6 @@
-import { NODE_TYPES } from "../engine/nodes.mjs";
+import { NODE_TYPES, CONNECTION_KINDS, claudeText, registerCustom, unregisterCustom } from "../engine/nodes.mjs";
 import { runWorkflow } from "../engine/engine.mjs";
-import DEMO from "../engine/demo.mjs";
+import TEMPLATES from "../engine/demo.mjs";
 
 const $ = (s, el = document) => el.querySelector(s);
 const NW = 236, NH = 82;
@@ -17,7 +17,7 @@ const P = {
   chart: '<path d="M5 20V10M12 20V4M19 20v-7"/>', fit: '<path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4"/>',
   reset: '<path d="M4 12a8 8 0 1 0 3-6.2M4 4v4h4"/>', search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/>',
   folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
-  key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M16 7l3 3"/>', download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>', trash: '<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>',
+  plug: '<path d="M9 3v5M15 3v5M6 8h12v4a6 6 0 0 1-12 0zM12 18v3"/>', code: '<path d="m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>', send: '<path d="M21 3 10 14M21 3l-7 18-4-7-7-4z"/>', users: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M17 14c2.5 0 4 2 4 5"/>', wand: '<path d="m5 19 10-10M14 4v3M19 9h-3M17 3.5l.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8z"/>', x: '<path d="M6 6l12 12M18 6 6 18"/>', key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M16 7l3 3"/>', download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>', trash: '<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>',
 };
 const icon = (n) => `<svg class="i" viewBox="0 0 24 24">${P[n] || ""}</svg>`;
 const paintIcons = (root = document) => root.querySelectorAll("[data-i]").forEach((e) => (e.innerHTML = icon(e.dataset.i)));
@@ -147,7 +147,8 @@ function renderInspector() {
     <div class="field"><label>Label</label><input data-k="__label" value="${esc(n.label || "")}" placeholder="${esc(d.label)}"></div>
     ${d.params.map((p) => {
       const v = n.params?.[p.key] ?? p.default ?? "";
-      const inner = p.type === "select" ? `<select data-k="${p.key}">${p.options.map((o) => `<option ${o === v ? "selected" : ""}>${o}</option>`).join("")}</select>`
+      const inner = p.type === "connection" ? `<select data-k="${p.key}"><option value="">(auto: first matching)</option>${loadConns().filter((c) => !p.kinds?.length || p.kinds.includes(c.kind)).map((c) => `<option ${c.name === v ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>`
+        : p.type === "select" ? `<select data-k="${p.key}">${p.options.map((o) => `<option ${o === v ? "selected" : ""}>${o}</option>`).join("")}</select>`
         : p.type === "textarea" ? `<textarea data-k="${p.key}" spellcheck="false">${esc(v)}</textarea>`
         : `<input data-k="${p.key}" type="${p.type === "number" ? "number" : "text"}" value="${esc(v)}">`;
       return `<div class="field"><label>${p.label}</label>${inner}</div>`;
@@ -195,11 +196,11 @@ $("#tbl").addEventListener("click", (e) => { const r = e.target.closest("tr[data
 function setStatus(s) { const el = $("#status"); el.className = "status " + s; el.textContent = { idle: "Idle", running: "Running…", waiting: "Waiting for approval", ok: "Run complete", failed: "Run failed" }[s] || s; }
 /* static mode: everything runs in the browser; workflows live in localStorage */
 const LS = "outpulse-flow:workflows", store = () => { try { return JSON.parse(localStorage.getItem(LS)) || {}; } catch { return {}; } };
-const allWf = () => ({ [DEMO.id]: DEMO, ...store() });
+const allWf = () => ({ ...Object.fromEntries(TEMPLATES.map((t) => [t.id, t])), ...store() });
 const localRuns = {};
 function localRun(workflow) {
   const r = { id: uid("r"), status: "running", steps: [], pending: null, activeEdges: [] }; localRuns[r.id] = r;
-  runWorkflow(workflow, { hooks: {
+  runWorkflow(workflow, { connections: loadConns(), hooks: {
     onStep: (s) => { const i = r.steps.findIndex((x) => x.id === s.id); if (i >= 0) r.steps[i] = { ...r.steps[i], ...s }; else r.steps.push(s); },
     approve: (req) => new Promise((resolve) => { r.pending = { ...req, resolve }; }),
   } }).then((o) => { r.status = o.status; r.steps = o.steps; r.activeEdges = o.activeEdges; }).catch((e) => { r.status = "failed"; r.error = String(e.message || e); });
@@ -249,7 +250,8 @@ $("#loadmenu").onclick = async (e) => {
   const b = e.target.closest("button"); if (!b) return; $("#loadmenu").classList.add("hidden");
   setWorkflow(b.dataset.wf ? await api("/api/workflows/" + b.dataset.wf) : { id: "", name: "Untitled", nodes: [{ id: "start", type: "trigger.manual", x: 80, y: 160, params: { payload: "{}" } }], edges: [] });
 };
-function setWorkflow(w) { wf = w; run = null; sel = null; $("#wfname").value = wf.name; $("#approval").classList.add("hidden"); setStatus("idle"); render(); fit(); }
+function fillDefaults(w) { for (const n of w.nodes) { const d = NODE_TYPES[n.type]; if (!d) continue; n.params = { ...Object.fromEntries(d.params.map((p) => [p.key, p.default ?? ""])), ...(n.params || {}) }; } return w; }
+function setWorkflow(w) { wf = fillDefaults(w); run = null; sel = null; $("#wfname").value = wf.name; $("#approval").classList.add("hidden"); setStatus("idle"); render(); fit(); }
 
 /* ---------- canvas interaction ---------- */
 const canvas = $("#canvas");
@@ -314,8 +316,97 @@ function fit() {
   view = { s, x: left + (r.width - left - right - (x1 - x0) * s) / 2 - x0 * s, y: top + (r.height - top - bot - (y1 - y0) * s) / 2 - y0 * s }; applyView();
 }
 $("#fitBtn").onclick = fit;
-globalThis.ANTHROPIC_KEY = localStorage.getItem("outpulse-flow:key") || "";
-$("#keyBtn").onclick = () => { const k = prompt("Anthropic API key (stored only in this browser). Leave empty to use mock replies.", globalThis.ANTHROPIC_KEY || ""); if (k === null) return; globalThis.ANTHROPIC_KEY = k.trim(); localStorage.setItem("outpulse-flow:key", globalThis.ANTHROPIC_KEY); toast(k.trim() ? "Key saved in this browser" : "Using mock replies"); };
+
+/* ---------- connections, custom nodes, AI builder ---------- */
+const CK = "outpulse-flow:conns", CUK = "outpulse-flow:custom";
+const jget = (k) => { try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; } };
+const loadConns = () => jget(CK), saveConns = (l) => localStorage.setItem(CK, JSON.stringify(l));
+const loadCustom = () => jget(CUK), saveCustom = (l) => localStorage.setItem(CUK, JSON.stringify(l));
+loadCustom().forEach(registerCustom);
+const slug = (t) => String(t).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "node";
+
+function modal(title, html) {
+  const m = $("#modal"); m.innerHTML = `<div class="mcard glass"><div class="mhead"><b>${title}</b><button id="mclose">${icon("x")}</button></div><div class="mbody">${html}</div></div>`;
+  m.classList.remove("hidden"); $("#mclose").onclick = closeModal; m.onclick = (e) => { if (e.target === m) closeModal(); }; return $(".mbody", m);
+}
+const closeModal = () => $("#modal").classList.add("hidden");
+
+function openConnections() {
+  const draw = () => {
+    const list = loadConns();
+    const b = modal("Connections", `<div class="hint" style="margin:0 0 10px">Saved logins your nodes can use. Stored in this browser only, in plain text.</div>
+      <div class="clist">${list.length ? list.map((c, i) => `<div class="crow"><div><b>${esc(c.name)}</b><span>${esc(CONNECTION_KINDS[c.kind]?.label || c.kind)}</span></div><button class="btn sm" data-del="${i}">${icon("trash")}</button></div>`).join("") : '<div class="empty" style="padding:10px 0">No connections yet</div>'}</div>
+      <div class="field"><label>Name</label><input id="cn" placeholder="e.g. claude, slack-niro"></div>
+      <div class="field"><label>Type</label><select id="ck">${Object.entries(CONNECTION_KINDS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("")}</select></div>
+      <div class="field"><label id="csl">API key</label><input id="cs" type="password" autocomplete="off"></div>
+      <div class="field" id="cew" style="display:none"><label id="cel"></label><input id="ce"></div>
+      <div class="row2"><button class="btn dark sm" id="cadd">Add connection</button></div>`);
+    const kinds = () => { const k = CONNECTION_KINDS[$("#ck", b).value]; $("#csl", b).textContent = k.secret; $("#cew", b).style.display = k.extra ? "" : "none"; $("#cel", b).textContent = k.extra || ""; };
+    $("#ck", b).onchange = kinds; kinds();
+    b.onclick = (e) => { const d = e.target.closest("[data-del]"); if (d) { const l = loadConns(); l.splice(+d.dataset.del, 1); saveConns(l); draw(); renderInspector(); } };
+    $("#cadd", b).onclick = () => {
+      const name = $("#cn", b).value.trim(), kind = $("#ck", b).value, secret = $("#cs", b).value.trim(), extra = $("#ce", b).value.trim();
+      if (!name || !secret) return toast("Name and key are required");
+      if (loadConns().some((c) => c.name === name)) return toast("That name is taken");
+      if (CONNECTION_KINDS[kind].extra && !extra) return toast(CONNECTION_KINDS[kind].extra + " is required");
+      saveConns([...loadConns(), { name, kind, secret, extra }]); toast("Connection added"); draw(); renderInspector();
+    };
+  };
+  draw();
+}
+
+function openBuilder() {
+  const draw = () => {
+    const custom = loadCustom();
+    const b = modal("Create your own node", `<div class="hint" style="margin:0 0 10px">Name it, list its inputs, write the JavaScript. It then shows up in the node list under Custom.</div>
+      ${custom.length ? `<div class="clist">${custom.map((c, i) => `<div class="crow"><div><b>${esc(c.label)}</b><span>${esc(c.type)}</span></div><button class="btn sm" data-del="${i}">${icon("trash")}</button></div>`).join("")}</div>` : ""}
+      <div class="field"><label>Name</label><input id="bn" placeholder="e.g. Price calculator"></div>
+      <div class="field"><label>Colour / icon</label><div style="display:flex;gap:8px"><select id="bt"><option>blue</option><option>dark</option><option>violet</option><option>lime</option><option>pink</option></select><select id="bi"><option>code</option><option>spark</option><option>bolt</option><option>globe</option><option>layers</option><option>terminal</option><option>send</option></select></div></div>
+      <div class="field"><label>Inputs (one per line: key | Label | text, textarea or number)</label><textarea id="bp" spellcheck="false">price | Price | number\nmarkup | Markup % | number</textarea></div>
+      <div class="field"><label>Code (async, use $in, params, $, fetch; return an object)</label><textarea id="bc" spellcheck="false" style="min-height:110px">return { ...$in, final: params.price * (1 + params.markup / 100) };</textarea></div>
+      <div class="row2"><button class="btn dark sm" id="bs">Save node</button></div>`);
+    b.onclick = (e) => { const d = e.target.closest("[data-del]"); if (d) { const l = loadCustom(); const [x] = l.splice(+d.dataset.del, 1); saveCustom(l); unregisterCustom(x.type); renderPalette(); draw(); } };
+    $("#bs", b).onclick = () => {
+      const label = $("#bn", b).value.trim(); if (!label) return toast("Give the node a name");
+      const params = $("#bp", b).value.split("\n").map((l) => l.split("|").map((x) => x.trim())).filter((a) => a[0]).map(([key, lab, type]) => ({ key, label: lab || key, type: ["textarea", "number"].includes(type) ? type : "text" }));
+      const def = { type: "custom." + slug(label), label, tone: $("#bt", b).value, icon: $("#bi", b).value, desc: "Custom node", params, code: $("#bc", b).value };
+      saveCustom([...loadCustom().filter((c) => c.type !== def.type), def]); registerCustom(def); renderPalette(); closeModal(); toast(`"${label}" added to your node list`);
+    };
+  };
+  draw();
+}
+
+function layout(w) {
+  const preds = {}; w.nodes.forEach((n) => (preds[n.id] = [])); w.edges.forEach((e) => preds[e.to]?.push(e.from));
+  const memo = {}, depth = (id, seen = new Set()) => { if (memo[id] != null) return memo[id]; if (seen.has(id)) return 0; seen.add(id); return (memo[id] = preds[id].length ? 1 + Math.max(...preds[id].map((p) => depth(p, seen))) : 0); };
+  const cols = {}; w.nodes.forEach((n) => (cols[depth(n.id)] ??= []).push(n));
+  const tallest = Math.max(...Object.values(cols).map((c) => c.length));
+  for (const [d, list] of Object.entries(cols)) list.forEach((n, i) => { n.x = 60 + d * 300; n.y = 70 + i * 115 + ((tallest - list.length) * 115) / 2; });
+}
+$("#tidyBtn").onclick = () => { layout(wf); render(); fit(); };
+
+function openAI() {
+  const b = modal("Build a workflow with AI", `<div class="hint" style="margin:0 0 10px">Describe the automation. Claude drafts the nodes and connections on the canvas; you review and edit.</div>
+    <div class="field"><textarea id="ap" spellcheck="false" style="min-height:120px" placeholder="e.g. When a new cafe signs up, have the marketing team plan a launch post, ask me to approve it, then send it to Slack."></textarea></div>
+    <div class="row2"><button class="btn dark sm" id="ago">${icon("wand")}Build</button></div>`);
+  $("#ago", b).onclick = async () => {
+    const conn = loadConns().find((c) => c.kind === "anthropic");
+    if (!conn) { closeModal(); toast("Add an Anthropic connection first"); return openConnections(); }
+    const ask = $("#ap", b).value.trim(); if (!ask) return;
+    const btn = $("#ago", b); btn.disabled = true; btn.textContent = "Building…";
+    const catalog = Object.entries(NODE_TYPES).map(([t, d]) => `${t}: ${d.label}. ${d.desc}. params: ${d.params.map((p) => p.key).join(", ") || "none"}. outputs: ${d.outputs.join(", ") || "none"}`).join("\n");
+    try {
+      const out = await claudeText({ conn, maxTokens: 3000, system: `You design automation workflows for a visual builder. Reply with ONLY JSON, no prose: {"name":string,"nodes":[{"id":string,"type":string,"label"?:string,"params":object}],"edges":[{"from":id,"to":id,"port"?:string}]}. Exactly one trigger node. Use only these node types:\n${catalog}\nReference earlier data with {{ $in.field }} (previous step) or {{ nodeId.field }}. For nodes with several outputs set the edge port to one of them. Params you omit get defaults.`, prompt: ask });
+      const raw = JSON.parse(out.match(/\{[\s\S]*\}/)[0]);
+      const nodes = (raw.nodes || []).filter((n) => NODE_TYPES[n.type]).map((n) => ({ id: slug(n.id).replace(/-/g, "_"), type: n.type, label: n.label, x: 0, y: 0, params: n.params || {} }));
+      const ids = new Set(nodes.map((n) => n.id)); const idm = (x) => slug(x).replace(/-/g, "_");
+      const edges = (raw.edges || []).filter((e) => ids.has(idm(e.from)) && ids.has(idm(e.to))).map((e) => ({ id: uid("e"), from: idm(e.from), to: idm(e.to), ...(e.port ? { port: e.port } : {}) }));
+      if (!nodes.length) throw new Error("No usable nodes in the answer");
+      const w = { id: "", name: raw.name || "AI workflow", nodes, edges }; layout(w); closeModal(); setWorkflow(w); toast("Drafted. Review it, then Run.");
+    } catch (e) { btn.disabled = false; btn.innerHTML = icon("wand") + "Build"; toast("Could not build: " + e.message); }
+  };
+}
+$("#connBtn").onclick = openConnections; $("#nodeBtn").onclick = openBuilder; $("#aiBtn").onclick = openAI;
 
 /* ---------- chrome ---------- */
 document.querySelectorAll("#rail [data-panel]").forEach((b) => (b.onclick = () => { const p = $("#" + b.dataset.panel); p.classList.toggle("hidden"); b.classList.toggle("on", !p.classList.contains("hidden")); }));

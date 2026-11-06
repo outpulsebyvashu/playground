@@ -5,10 +5,10 @@ const r = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 const strip = (s) => s.replace(/^import .*$/gm, "").replace(/^export default /gm, "const __default = ").replace(/^export /gm, "");
 const nodes = strip(r("engine/nodes.mjs")), engine = strip(r("engine/engine.mjs")), demo = strip(r("engine/demo.mjs")), app = strip(r("web/app.js"));
 const js = `
-const NodesMod = (() => {${nodes}\nreturn { NODE_TYPES, render, lookup }; })();
+const NodesMod = (() => {${nodes}\nreturn { NODE_TYPES, CONNECTION_KINDS, claudeText, registerCustom, unregisterCustom, render, lookup, pickConn }; })();
 const DemoMod = (() => {${demo}\nreturn __default; })();
 const EngineMod = (() => { const { NODE_TYPES, render } = NodesMod; ${engine}\nreturn { runWorkflow }; })();
-(() => { const { NODE_TYPES } = NodesMod; const { runWorkflow } = EngineMod; const DEMO = DemoMod; ${app}\n})();`;
+(() => { const { NODE_TYPES, CONNECTION_KINDS, claudeText, registerCustom, unregisterCustom } = NodesMod; const { runWorkflow } = EngineMod; const TEMPLATES = DemoMod; ${app}\n})();`;
 let html = r("web/index.html")
   .replace('<link rel="stylesheet" href="style.css">', `<style>\n${r("web/style.css")}\n</style>`)
   .replace('<script type="module" src="app.js"></script>', () => `<script>\n${js}\n</script>`);

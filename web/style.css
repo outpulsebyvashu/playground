@@ -136,3 +136,12 @@ td { padding: 8px 6px; border-top: 1px solid var(--line); } tr.r { cursor: point
   #mini, .wfname small, .status { display: none; }
   .wfname { min-width: 0; flex: 1; } .wfname input { width: 100%; }
 }
+
+#modal { position: absolute; inset: 0; z-index: 50; background: rgba(21,23,28,.28); display: grid; place-items: center; padding: 14px; }
+#modal.hidden { display: none; }
+.mcard { width: min(520px, 100%); max-height: calc(100vh - 28px); overflow: auto; padding: 18px; background: #fff; }
+.mhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; font-size: 16px; }
+.mhead button { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; } .mhead button:hover { background: #eef1fb; }
+.clist { margin-bottom: 14px; } .crow { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--line); }
+.crow b { font-size: 13px; display: block; } .crow span { font-size: 11.5px; color: var(--ink3); }
+#rail { padding-bottom: 8px; }

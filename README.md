@@ -23,7 +23,10 @@ Optional Node server (`node server.mjs`) adds webhooks (`POST /hook/<path>`) and
 
 ## Notes
 
-- Nodes: manual/webhook triggers, HTTP request, Claude agent, set fields, if/else, delay, human approval, output.
+- Nodes: manual/webhook triggers, HTTP request, Send message (Slack/Discord/Telegram/webhook), Claude agent, **Agent team** (several agents, pipeline or parallel, coordinator summary), **Code (JavaScript)**, set fields, if/else, delay, human approval, output.
+- **Connections** (plug button): saved logins (Anthropic, Bearer, header, basic, query, Slack, Discord, Telegram, webhook). Nodes pick one in the inspector.
+- **Build from scratch:** Code node, the custom node builder (code button), and Build with AI (wand button) which drafts a whole workflow from a description. Tidy button auto-arranges.
+- Slack webhooks block browser (CORS) calls; Telegram and Discord work from the browser.
 - Static mode limits: no webhooks; HTTP nodes only reach APIs that allow browser (CORS) requests.
 - Webhook example (server mode): `curl -X POST localhost:8787/hook/niro-signup -d '{"cafe":"X","city":"Mysuru"}'`
 - The HTTP node can call any URL from the server, so keep this tool private until auth is added.

@@ -5,7 +5,7 @@ const now = () => (globalThis.performance ?? Date).now();
 /**
  * Run a workflow.
  * wf: { nodes:[{id,type,params}], edges:[{id,from,to,port?}] }
- * opts: { trigger?, webhookPath?, hooks:{ onStep(step), approve({nodeId,message,data}) } }
+ * opts: { trigger?, webhookPath?, connections?:[{name,kind,secret,extra}], hooks:{ onStep(step), approve({nodeId,message,data}) } }
  * Returns { status: "ok"|"failed", steps:[{id,type,status,output,port,error,ms}] }
  */
 export async function runWorkflow(wf, opts = {}) {
@@ -59,10 +59,11 @@ export async function runWorkflow(wf, opts = {}) {
     hooks.onStep({ ...step });
     const t0 = now();
     try {
-      const params = render(node.params ?? {}, scope);
+      const raw = new Set(def.params.filter((x) => x.raw).map((x) => x.key));
+      const params = { ...render(Object.fromEntries(Object.entries(node.params ?? {}).filter(([k]) => !raw.has(k))), scope), ...Object.fromEntries(Object.entries(node.params ?? {}).filter(([k]) => raw.has(k))) };
       if (node.type === "approval.human") step.status = "waiting";
       hooks.onStep({ ...step, params });
-      const res = await def.run({ node, params, input, trigger: opts.trigger, hooks, scope });
+      const res = await def.run({ node, params, input, trigger: opts.trigger, hooks, scope, ctx: { connections: opts.connections || [] } });
       step.status = "ok";
       step.output = res.output;
       step.port = res.port ?? "out";
