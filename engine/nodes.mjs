@@ -68,7 +68,7 @@ export const NODE_TYPES = {
   },
   "ai.claude": {
     label: "Claude agent", group: "AI", tone: "violet", icon: "spark", outputs: ["out"],
-    desc: "Prompt Claude. Set ANTHROPIC_API_KEY on the server (mock reply if missing)",
+    desc: "Prompt Claude. Add your API key with the key button (mock reply if missing)",
     params: [
       { key: "role", label: "Agent role", type: "select", options: ["Strategist", "Copywriter", "Designer", "Growth manager", "Analyst", "Custom"], default: "Copywriter" },
       { key: "system", label: "System prompt", type: "textarea", default: "You are a concise marketing copywriter for Niro, a cafe loyalty app." },
@@ -76,11 +76,11 @@ export const NODE_TYPES = {
       { key: "model", label: "Model", type: "text", default: "claude-sonnet-5-5" },
     ],
     run: async ({ params }) => {
-      const key = globalThis.process?.env?.ANTHROPIC_API_KEY;
+      const key = globalThis.process?.env?.ANTHROPIC_API_KEY ?? globalThis.ANTHROPIC_KEY;
       if (!key) return { output: { text: `[mock ${params.role}] ${String(params.prompt).slice(0, 140)}`, mock: true } };
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json", "anthropic-dangerous-direct-browser-access": "true" },
         body: JSON.stringify({
           model: params.model || "claude-sonnet-5-5", max_tokens: 1024,
           system: params.system || undefined,

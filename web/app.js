@@ -1,4 +1,6 @@
-import { NODE_TYPES } from "/engine/nodes.mjs";
+import { NODE_TYPES } from "../engine/nodes.mjs";
+import { runWorkflow } from "../engine/engine.mjs";
+import DEMO from "../engine/demo.mjs";
 
 const $ = (s, el = document) => el.querySelector(s);
 const NW = 236, NH = 82;
@@ -15,7 +17,7 @@ const P = {
   chart: '<path d="M5 20V10M12 20V4M19 20v-7"/>', fit: '<path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4"/>',
   reset: '<path d="M4 12a8 8 0 1 0 3-6.2M4 4v4h4"/>', search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/>',
   folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
-  download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>', trash: '<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M16 7l3 3"/>', download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>', trash: '<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>',
 };
 const icon = (n) => `<svg class="i" viewBox="0 0 24 24">${P[n] || ""}</svg>`;
 const paintIcons = (root = document) => root.querySelectorAll("[data-i]").forEach((e) => (e.innerHTML = icon(e.dataset.i)));
@@ -191,7 +193,31 @@ $("#tbl").addEventListener("click", (e) => { const r = e.target.closest("tr[data
 
 /* ---------- run ---------- */
 function setStatus(s) { const el = $("#status"); el.className = "status " + s; el.textContent = { idle: "Idle", running: "Running…", waiting: "Waiting for approval", ok: "Run complete", failed: "Run failed" }[s] || s; }
-async function api(path, opts) { const r = await fetch(path, opts && { ...opts, headers: { "content-type": "application/json" }, body: JSON.stringify(opts.body) }); if (!r.ok && r.status !== 202) throw new Error((await r.json().catch(() => ({}))).error || r.status); return r.json(); }
+/* static mode: everything runs in the browser; workflows live in localStorage */
+const LS = "outpulse-flow:workflows", store = () => { try { return JSON.parse(localStorage.getItem(LS)) || {}; } catch { return {}; } };
+const allWf = () => ({ [DEMO.id]: DEMO, ...store() });
+const localRuns = {};
+function localRun(workflow) {
+  const r = { id: uid("r"), status: "running", steps: [], pending: null, activeEdges: [] }; localRuns[r.id] = r;
+  runWorkflow(workflow, { hooks: {
+    onStep: (s) => { const i = r.steps.findIndex((x) => x.id === s.id); if (i >= 0) r.steps[i] = { ...r.steps[i], ...s }; else r.steps.push(s); },
+    approve: (req) => new Promise((resolve) => { r.pending = { ...req, resolve }; }),
+  } }).then((o) => { r.status = o.status; r.steps = o.steps; r.activeEdges = o.activeEdges; }).catch((e) => { r.status = "failed"; r.error = String(e.message || e); });
+  return r;
+}
+const runView = (r) => ({ id: r.id, status: r.pending ? "waiting" : r.status, error: r.error, steps: r.steps, activeEdges: r.activeEdges, pending: r.pending && { nodeId: r.pending.nodeId, message: r.pending.message } });
+async function api(path, opts) {
+  let m; const body = opts?.body;
+  if (path === "/api/workflows") return Object.values(allWf()).map(({ id, name }) => ({ id, name }));
+  if ((m = path.match(/^\/api\/workflows\/([\w-]+)$/))) {
+    if (opts?.method === "PUT") { const id = (body.id || body.name || "workflow").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "workflow"; localStorage.setItem(LS, JSON.stringify({ ...store(), [id]: { ...body, id } })); return { id }; }
+    return structuredClone(allWf()[m[1]]);
+  }
+  if (path === "/api/run") return runView(localRun(body.workflow));
+  if ((m = path.match(/^\/api\/run\/(\w+)\/approve$/))) { const r = localRuns[m[1]]; const { resolve } = r.pending; r.pending = null; resolve(!!body.approved); return { ok: true }; }
+  if ((m = path.match(/^\/api\/run\/(\w+)$/))) return runView(localRuns[m[1]]);
+  throw new Error("unknown route " + path);
+}
 
 async function startRun() {
   clearInterval(pollTimer); run = { steps: [] }; setStatus("running"); $("#runBtn").disabled = true; render();
@@ -288,6 +314,8 @@ function fit() {
   view = { s, x: left + (r.width - left - right - (x1 - x0) * s) / 2 - x0 * s, y: top + (r.height - top - bot - (y1 - y0) * s) / 2 - y0 * s }; applyView();
 }
 $("#fitBtn").onclick = fit;
+globalThis.ANTHROPIC_KEY = localStorage.getItem("outpulse-flow:key") || "";
+$("#keyBtn").onclick = () => { const k = prompt("Anthropic API key (stored only in this browser). Leave empty to use mock replies.", globalThis.ANTHROPIC_KEY || ""); if (k === null) return; globalThis.ANTHROPIC_KEY = k.trim(); localStorage.setItem("outpulse-flow:key", globalThis.ANTHROPIC_KEY); toast(k.trim() ? "Key saved in this browser" : "Using mock replies"); };
 
 /* ---------- chrome ---------- */
 document.querySelectorAll("#rail [data-panel]").forEach((b) => (b.onclick = () => { const p = $("#" + b.dataset.panel); p.classList.toggle("hidden"); b.classList.toggle("on", !p.classList.contains("hidden")); }));

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Outpulse Flow · playground</title>
-<link rel="stylesheet" href="/web/style.css">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="canvas"><div id="world"><svg id="edges"></svg><div id="nodes"></div></div></div>
@@ -25,6 +25,7 @@
   <button class="on" data-panel="palette" title="Nodes"><span data-i="grid"></span></button>
   <button class="on" data-panel="bottom" title="Run log"><span data-i="chart"></span></button>
   <button id="fitBtn" title="Fit to screen"><span data-i="fit"></span></button>
+  <button id="keyBtn" title="Claude API key"><span data-i="key"></span></button>
   <button id="clearBtn" title="Clear run"><span data-i="reset"></span></button>
 </div>
 
@@ -49,6 +50,6 @@
 
 <div id="loadmenu" class="glass hidden"></div>
 <div id="toast"></div>
-<script type="module" src="/web/app.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>
